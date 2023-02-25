@@ -19,9 +19,11 @@ from flask_babel import _
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if os.getenv("DISABLE_BUILTIN_AUTH"):
-            if os.getenv("DISABLE_BUILTIN_AUTH") == "true":
-                return f(*args, **kwargs)
+        if (
+            os.getenv("DISABLE_BUILTIN_AUTH")
+            and os.getenv("DISABLE_BUILTIN_AUTH") == "true"
+        ):
+            return f(*args, **kwargs)
         if not Settings.get_or_none(Settings.key == "admin_username"):
             return redirect('/settings')
         if not session.get("admin_key"):
@@ -43,11 +45,10 @@ def admin():
 @app.route('/invite', methods=["GET", "POST"])
 @login_required
 def invite():
-    update_msg = False
     if request.method == "POST":
         try:
             code = request.form.get("code").upper()
-            if not len(code) == 6:
+            if len(code) != 6:
                 return abort(401)
         except:
             code = ''.join(secrets.choice(
@@ -55,8 +56,6 @@ def invite():
         if Invitations.get_or_none(code=code):
             return abort(401)  # Already Exists
         expires = None
-        unlimited = 0
-        duration = None
         specific_libraries = None
         if request.form.get("expires") == "day":
             expires = (datetime.datetime.now() +
@@ -69,22 +68,18 @@ def invite():
                        datetime.timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
         if request.form.get("expires") == "never":
             expires = None
-        if request.form.get("unlimited"):
-            unlimited = 1
-        if request.form.get("duration"):
-            duration = request.form.get("duration")
+        unlimited = 1 if request.form.get("unlimited") else 0
+        duration = request.form.get("duration") or None
         if int(request.form.get("library_count")) > 0:
-            specific_libraries = []
             library_count = int(request.form.get("library_count"))
-            for library in range(library_count+1):
-
-                if request.form.get("library_" + str(library)):
-                    specific_libraries.append(request.form.get(
-                        "library_" + str(library)))
-            if not specific_libraries:
-                specific_libraries = None
-            else:
-                specific_libraries = ', '.join(specific_libraries)
+            specific_libraries = [
+                request.form.get(f"library_{str(library)}")
+                for library in range(library_count + 1)
+                if request.form.get(f"library_{str(library)}")
+            ]
+            specific_libraries = (
+                ', '.join(specific_libraries) if specific_libraries else None
+            )
         Invitations.create(code=code, used=False, created=datetime.datetime.now(
         ).strftime("%Y-%m-%d %H:%M"), expires=expires, unlimited=unlimited, duration=duration, specific_libraries=specific_libraries)
         link = os.getenv("APP_URL") + "/j/" + code
@@ -94,6 +89,7 @@ def invite():
         invitations = Invitations.select().order_by(Invitations.created.desc())
         needUpdate()
         server_type = Settings.get(Settings.key == "server_type").value
+        update_msg = False
         return render_template("admin/invite.html", invitations=invitations, update_msg=update_msg, needUpdate=needUpdate(), url=os.getenv("APP_URL"), server_type=server_type)
 
 
@@ -103,7 +99,7 @@ def preferences():
     if not Settings.select().where(Settings.key == 'server_type').exists():
         if request.method == 'GET':
             type = request.args.get("type")
-            if type == 'jellyfin' or type == 'plex':
+            if type in ['jellyfin', 'plex']:
                 Settings.create(key="server_type", value=type)
                 return redirect("/settings")
 
@@ -111,7 +107,7 @@ def preferences():
     elif not Settings.select().where(Settings.key == 'admin_username').exists():
 
         if request.method == 'GET':
-            if request.args.get("type") == 'jellyfin' or request.args.get("type") == 'plex':
+            if request.args.get("type") in ['jellyfin', 'plex']:
                 Settings.update(value=request.args.get("type")).where(
                     Settings.key == "server_type").execute()
                 logging.info("Server type set to " + request.args.get("type"))
@@ -139,34 +135,24 @@ def preferences():
 
         server_type = Settings.get(Settings.key == "server_type").value
         if request.method == 'GET':
-
             return render_template("verify-server.html", server_type=server_type)
 
         elif request.method == 'POST':
             server_name = request.form.get("server_name")
             server_url = request.form.get("server_url")
             api_key = request.form.get("api_key")
-            overseerr_url = None
-            discord_id = None
-
-            # Getting Libraries Properly
-            libraries = []
-
             library_count = int(request.form.get("library_count"))
-            for library in range(library_count+1):
-
-                if request.form.get("library_" + str(library)):
-                    libraries.append(request.form.get(
-                        "library_" + str(library)))
+            libraries = [
+                request.form.get(f"library_{str(library)}")
+                for library in range(library_count + 1)
+                if request.form.get(f"library_{str(library)}")
+            ]
             libraries = ', '.join(libraries)
             if not libraries:
                 return render_template("verify-server.html", error=_("You must select at least one library."), server_type=server_type)
 
-            if request.form.get("discord_id"):
-                discord_id = request.form.get("discord_id")
-            if request.form.get("overseerr_url"):
-                overseerr_url = request.form.get("overseerr_url")
-
+            discord_id = request.form.get("discord_id") or None
+            overseerr_url = request.form.get("overseerr_url") or None
             Settings.create(key="server_name", value=server_name)
             Settings.create(key="server_url", value=server_url)
             Settings.create(key="api_key", value=api_key)

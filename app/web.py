@@ -12,9 +12,11 @@ import threading
 
 @app.route('/')
 def redirect_to_invite():
-    if not Settings.select().where(Settings.key == 'admin_username').exists():
-        return redirect('/settings')
-    return redirect('/admin')
+    return (
+        redirect('/admin')
+        if Settings.select().where(Settings.key == 'admin_username').exists()
+        else redirect('/settings')
+    )
 
 
 @app.route('/favicon.ico')
@@ -31,10 +33,7 @@ def plex(code):
         return render_template('401.html'), 401
     name = Settings.get_or_none(
         Settings.key == "server_name")
-    if name:
-        name = name.value
-    else:
-        name = "Wizarr"
+    name = name.value if name else "Wizarr"
     resp = make_response(render_template(
         'user-plex-login.html', name=name, code=code))
     resp.set_cookie('code', code)

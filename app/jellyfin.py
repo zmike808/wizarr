@@ -18,7 +18,7 @@ def Post(path, data):
     }
     response = requests.post(
         f"{JELLYFIN_URL}{path}", json=data, headers=headers)
-    logging.info("POST " + path + " " + str(response.status_code))
+    logging.info(f"POST {path} {str(response.status_code)}")
     return response
 
 
@@ -27,9 +27,7 @@ def Get(path):
     headers = {
         "X-Emby-Token": API_KEY,
     }
-    response = requests.get(
-        f"{JELLYFIN_URL}{path}", headers=headers)
-    return response
+    return requests.get(f"{JELLYFIN_URL}{path}", headers=headers)
 
 
 def jf_inviteUser(username, password, code, email):
@@ -45,7 +43,7 @@ def jf_inviteUser(username, password, code, email):
             "%Y-%m-%d %H:%M"), used_by=username).where(Invitations.code == code).execute()
 
     response = Post("/Users/New", user)
-    logging.info("Invited " + username + " to Jellyfin Server")
+    logging.info(f"Invited {username} to Jellyfin Server")
 
     user_id = response.json()["Id"]
 
@@ -66,7 +64,7 @@ def jf_inviteUser(username, password, code, email):
     Post(f"/Users/{user_id}/Policy", policy)
     expires = (datetime.datetime.now() + datetime.timedelta(days=int(Invitations.get(code=code).duration)
                                                            )) if Invitations.get(code=code).duration else None
-    
+
     print(expires)
     Users.create(username=username, email=email,
                  password=password, token=user_id, code=code, expires=expires)
@@ -93,12 +91,11 @@ def jf_scan():
         response = requests.get(
             f"{jellyfin_url}/Library/MediaFolders", headers=headers)
     except Exception as e:
-        logging.error("Error getting Jellyfin Libraries: " + str(e))
+        logging.error(f"Error getting Jellyfin Libraries: {str(e)}")
         abort(400)
-    libraries = {}
-    for library in response.json()["Items"]:
-
-        libraries[library["Name"]] = library["Id"]
+    libraries = {
+        library["Name"]: library["Id"] for library in response.json()["Items"]
+    }
     return jsonify(libraries)
 
 
@@ -112,12 +109,11 @@ def jf_scan_specific():
         response = Get("/Library/MediaFolders")
         libraries_raw = response.json()
     except Exception as e:
-        logging.error("Error getting Jellyfin Libraries: " + str(e))
+        logging.error(f"Error getting Jellyfin Libraries: {str(e)}")
         abort(400)
-    libraries = {}
-    for library in response.json()["Items"]:
-
-        libraries[library["Name"]] = library["Id"]
+    libraries = {
+        library["Name"]: library["Id"] for library in response.json()["Items"]
+    }
     return jsonify(libraries)
 
 
@@ -141,7 +137,7 @@ def join_jellyfin():
         return render_template("welcome-jellyfin.html", username=username, email=email, code=code, error="Please fill out all fields")
 
     # check password validity
-    if not (len(password) >= 8 and len(password) <= 20):
+    if len(password) < 8 or len(password) > 20:
         return render_template("welcome-jellyfin.html", username=username, email=email, code=code, error="Password must be between 8 and 20 characters")
 
     if password != confirm_password:
@@ -167,7 +163,7 @@ def jf_GetUsers():
     # Compare database to users
     if Users.select():
         for user in Users.select():
-            if not any(d['Id'] == user.token for d in response.json()):
+            if all(d['Id'] != user.token for d in response.json()):
                 user.delete_instance()
     return response.json()
 
@@ -176,6 +172,4 @@ def jf_DeleteUser(user):
     headers = {
         "X-Emby-Token": API_KEY,
     }
-    response = requests.delete(
-        f"{JELLYFIN_URL}/Users/{user}", headers=headers)
-    return response
+    return requests.delete(f"{JELLYFIN_URL}/Users/{user}", headers=headers)
