@@ -63,7 +63,7 @@ def inviteUser(email, code):
         sections = list(
             (Invitations.get(Invitations.code == code).specific_libraries).split(", "))
     admin.myPlexAccount().inviteFriend(user=email, server=admin, sections=sections)
-    logging.info("Invited " + email + " to Plex Server")
+    logging.info(f"Invited {email} to Plex Server")
     if Invitations.select().where(Invitations.code == code, Invitations.unlimited == 0):
         Invitations.update(used=True, used_at=datetime.datetime.now().strftime(
             "%Y-%m-%d %H:%M"), used_by=email).where(Invitations.code == code).execute()
@@ -81,7 +81,7 @@ def SetupUser(token):
         user.acceptInvite(admin_email)
         user.enableViewStateSync()
     except Exception as e:
-        logging.error("Failed to setup user: " + str(e))
+        logging.error(f"Failed to setup user: {str(e)}")
 
 
 def optOutOnlineSources(token):
@@ -102,9 +102,7 @@ def scan():
         libraries_raw = plex.library.sections()
     except:
         abort(400)
-    libraries = []
-    for library in libraries_raw:
-        libraries.append(library.title)
+    libraries = [library.title for library in libraries_raw]
     return jsonify(libraries)
 
 
@@ -119,7 +117,5 @@ def scan_specific():
         libraries_raw = plex.library.sections()
     except:
         abort(400)
-    libraries = []
-    for library in libraries_raw:
-        libraries.append(library.title)
+    libraries = [library.title for library in libraries_raw]
     return jsonify(libraries)
